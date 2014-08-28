@@ -28,18 +28,7 @@ public class PacketHandler extends SimpleChannelInboundHandler<ByteBuf> {
 
         int length = ByteBufUtils.readVarInt(byteBuf);
         int opcode = ByteBufUtils.readVarInt(byteBuf);
-
-        switch (this.currentProtocol) {
-            case HANDSHAKE:
-                handleHandshake(channel, byteBuf);
-                break;
-            case STATUS:
-                handleStatus(channel, opcode, byteBuf);
-                break;
-            case LOGIN:
-                handleLogin(channel);
-                break;
-        }
+        handleHandshake(channel, byteBuf);
     }
 
     @Override
@@ -68,9 +57,9 @@ public class PacketHandler extends SimpleChannelInboundHandler<ByteBuf> {
         this.currentProtocol = protocols[state];
 
         if (this.currentProtocol == Protocol.LOGIN) {
-            handleLogin(channel);
+            handleLogin(channel, byteBuf);
         } else if (this.currentProtocol == Protocol.STATUS) {
-            sendStatusResponse(channel);
+            handleStatus(channel, byteBuf);
         }
     }
 
@@ -79,7 +68,15 @@ public class PacketHandler extends SimpleChannelInboundHandler<ByteBuf> {
      * @param channel
      * @param byteBuf
      */
-    private void handleStatus(Channel channel, int opcode, ByteBuf byteBuf) {
+    private void handleStatus(Channel channel, ByteBuf byteBuf) {
+         if (!byteBuf.isReadable())
+            return;
+
+        int length = ByteBufUtils.readVarInt(byteBuf);
+        int opcode = ByteBufUtils.readVarInt(byteBuf);
+
+        System.out.println(opcode);
+
         if (opcode == 0x0) { // Status Request
             sendStatusResponse(channel);
         } else if (opcode == 0x01) { // Ping Packet
@@ -127,10 +124,21 @@ public class PacketHandler extends SimpleChannelInboundHandler<ByteBuf> {
     }
 
     /**
-     * This server can't handle logins, so we'll just kick anyone who attempts to login...
+     * This server can't handle logins however we'll try to retrieve the name the client i trying
+     * to connect with, and check the whitelist/ban list
      * @param channel
      */
-    private void handleLogin(Channel channel) {
+    private void handleLogin(Channel channel, ByteBuf byteBuf) {
+        if (!byteBuf.isReadable())
+            return;
+
+        int length = ByteBufUtils.readVarInt(byteBuf);
+        int opcode = ByteBufUtils.readVarInt(byteBuf);
+
+        String name = ByteBufUtils.readUTF(byteBuf);
+
+        // TODO: check white + black list
+
         disconnect(channel, this.maintenanceServer.getKickMessage());
     }
 
