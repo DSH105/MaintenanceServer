@@ -19,6 +19,8 @@ import java.io.IOException;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 
+import static com.captainbern.mserver.Options.*;
+
 public class MaintenanceServer {
 
     public static final Logger LOGGER = LoggerFactory.getLogger(MaintenanceServer.class);
@@ -30,13 +32,25 @@ public class MaintenanceServer {
     private final EventLoopGroup workerGroup = new NioEventLoopGroup();
 
     private final OptionSet options;
-
-    private final PropertyHandler propertyHandler;
+    private PropertyHandler propertyHandler;
 
     private int port;
     private String ip;
 
     private JSONObject pingResponse;
+    private int protocolVersion;
+    private String serverVersion;
+    private int onlinePlayers;
+    private int maxOnlinePlayers;
+    private String motd;
+
+    private String defaultKickMessage;
+    private String kickMessageNotOnWhiteList;
+    private String kickMessageBanned;
+
+    private static String BANNED_PLAYERS = "banned-players.json";
+    private static String BANNED_IPS = "banned-ips.json";
+    private static String WHITELIST = "whitelist.json";
 
     public MaintenanceServer(OptionSet options) {
         this.bootstrap
@@ -51,24 +65,14 @@ public class MaintenanceServer {
                 .option(ChannelOption.TCP_NODELAY, true)
                 .option(ChannelOption.SO_KEEPALIVE, true);
 
-        // Create the server root
-        if (!getRoot().exists())
-            getRoot().mkdir();
-
         this.options = options;
 
-        LOGGER.info("Loading properties");
-        // This will create the default properties...
-        this.propertyHandler = new PropertyHandler(new File(getRoot(), "maintenance-server.properties"));
-        this.propertyHandler.getInt("protocol", -1);
-        this.propertyHandler.getString("version", "Maintenance Server");
-        this.propertyHandler.getInt("online", 0);
-        this.propertyHandler.getInt("maxOnline", 0);
-        this.propertyHandler.getString("motd", "A Maintenance Server");
-        this.propertyHandler.getString("kickMessage", "This is a Maintenance Server you silly goose!");
-
-        this.port = this.propertyHandler.getInt("port", 25566);
-        this.ip = this.propertyHandler.getString("ip", "127.0.0.1");
+        if (((Boolean) options.valueOf(USE_CONFIG))) {
+            this.propertyHandler = new PropertyHandler(new File(getRoot(), "maintenance-server.properties"));
+            loadProperties();
+        } else {
+            loadArgs(options);
+        }
 
         Runtime.getRuntime().addShutdownHook(new Thread("MaintenanceServer Shutdown Hook") {
             @Override
@@ -92,8 +96,8 @@ public class MaintenanceServer {
             LOGGER.warn("Something went wrong while reading the server-icon!");
         }
 
-        this.consoleManager.startConsole((Boolean) options.valueOf("jline"));
-        this.consoleManager.startFile((String) options.valueOf("logFile"));
+        this.consoleManager.startConsole((Boolean) options.valueOf(JLINE));
+        this.consoleManager.startFile((String) options.valueOf(LOG_FILE));
 
         long done = System.currentTimeMillis() - start;
         LOGGER.info("Done (" + done + "ms)! To stop the server, type \"stop\" or \"halt\"");
@@ -111,10 +115,40 @@ public class MaintenanceServer {
     }
 
     public void stop() {
-        LOGGER.info("Stopping server");
         this.consoleManager.stop();
+        LOGGER.info("Stopping server");
         this.workerGroup.shutdownGracefully();
         this.bossGroup.shutdownGracefully();
+    }
+
+    private void loadProperties() {
+        LOGGER.info("Loading properties");
+        // This will create the default properties...
+        this.protocolVersion = this.propertyHandler.getInt(PROTOCOL, Defaults.PROTOCOL);
+        this.serverVersion = this.propertyHandler.getString(VERSION, Defaults.VERSION);
+        this.onlinePlayers = this.propertyHandler.getInt(ONLINE_PLAYERS, Defaults.ONLINE_PLAYERS);
+        this.maxOnlinePlayers = this.propertyHandler.getInt(MAX_ONLINE, Defaults.MAX_ONLINE_PLAYERS);
+        this.motd = this.propertyHandler.getString(MOTD, Defaults.MOTD);
+        this.kickMessageBanned = this.propertyHandler.getString(KICK_MESSAGE, Defaults.KICK_MESSAGE);
+        this.kickMessageNotOnWhiteList = this.propertyHandler.getString(KICK_MESSAGE_NOT_ON_WHITELIST, Defaults.KICK_MESSAGE_NOT_ON_WHITELIST);
+        this.kickMessageBanned = this.propertyHandler.getString(KICK_MESSAGE_BANNED, Defaults.KICK_MESSAGE_BANNED);
+
+        this.port = this.propertyHandler.getInt(PORT, Defaults.PORT);
+        this.ip = this.propertyHandler.getString(IP, Defaults.IP);
+    }
+
+    private void loadArgs(OptionSet set) {
+        this.port = (int) set.valueOf(PORT);
+        this.ip = (String) set.valueOf(IP);
+        this.protocolVersion = (int) set.valueOf(PROTOCOL);
+        this.serverVersion = (String) set.valueOf(VERSION);
+        this.onlinePlayers = (int) set.valueOf(ONLINE_PLAYERS);
+        this.maxOnlinePlayers = (int) set.valueOf(MAX_ONLINE);
+        this.motd = (String) set.valueOf(MOTD);
+        this.defaultKickMessage = (String) set.valueOf(KICK_MESSAGE);
+        this.kickMessageBanned = (String) set.valueOf(KICK_MESSAGE_BANNED);
+        this.kickMessageNotOnWhiteList = (String) set.valueOf(KICK_MESSAGE_NOT_ON_WHITELIST);
+
     }
 
     private void handleFavicon() throws IOException {
@@ -140,17 +174,17 @@ public class MaintenanceServer {
         this.pingResponse = new JSONObject();
 
         JSONObject version = new JSONObject();
-        version.put("name", this.propertyHandler.getString("version", "Maintenance Server"));
-        version.put("protocol", this.propertyHandler.getInt("protocol", 5));
+        version.put("name", this.serverVersion);
+        version.put("protocol", this.protocolVersion);
         this.pingResponse.put("version", version);
 
         JSONObject players = new JSONObject();
-        players.put("max", this.propertyHandler.getInt("maxOnline", 0));
-        players.put("online", this.propertyHandler.getInt("online", 0));
+        players.put("max", this.maxOnlinePlayers);
+        players.put("online", this.onlinePlayers);
         this.pingResponse.put("players", players);
 
         JSONObject description = new JSONObject();
-        description.put("text", this.propertyHandler.getString("motd", "A Maintenance Server"));
+        description.put("text", this.motd);
         this.pingResponse.put("description", description);
     }
 
@@ -162,7 +196,7 @@ public class MaintenanceServer {
     }
 
     public String getKickMessage() {
-        return this.propertyHandler.getString("kickMessage", "This is a Maintenance Server you silly goose!");
+        return this.defaultKickMessage;
     }
 
     protected void handleCommand(String command) {
