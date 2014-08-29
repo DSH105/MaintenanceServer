@@ -17,6 +17,8 @@ import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.net.InetAddress;
+import java.net.InetSocketAddress;
+import java.net.SocketAddress;
 import java.net.UnknownHostException;
 
 import static com.captainbern.mserver.Options.*;
@@ -84,11 +86,6 @@ public class MaintenanceServer {
 
     public void start() {
         long start = System.currentTimeMillis();
-        try {
-            this.bind(InetAddress.getByName(this.ip), this.port);
-        } catch (UnknownHostException e) {
-            LOGGER.warn("Unknown ip: " + this.ip);
-        }
 
         try {
             this.handleFavicon();
@@ -103,10 +100,18 @@ public class MaintenanceServer {
         LOGGER.info("Done (" + done + "ms)! To stop the server, type \"stop\" or \"halt\"");
     }
 
-    public void bind(InetAddress address, int port) {
-        LOGGER.info("Starting a Maintenance Server on " + this.ip + ":" + port);
+    public void bind() {
 
-        ChannelFuture future = this.bootstrap.bind(address, port);
+        SocketAddress address;
+        if (ip.isEmpty()) {
+            address = new InetSocketAddress(this.port);
+        } else {
+            address = new InetSocketAddress(this.ip, this.port);
+        }
+
+        LOGGER.info("Starting a Maintenance Server on " + address);
+
+        ChannelFuture future = this.bootstrap.bind(address);
         Channel channel = future.awaitUninterruptibly().channel();
 
         if (!channel.isActive()) {

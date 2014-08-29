@@ -77,6 +77,7 @@ public class Main {
 
         try {
             server.start();
+            server.bind();
         } catch (Throwable throwable) {
             MaintenanceServer.LOGGER.error("An error occurred during server startup", throwable);
             System.exit(-1);
