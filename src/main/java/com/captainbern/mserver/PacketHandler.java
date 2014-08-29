@@ -26,9 +26,6 @@ public class PacketHandler extends SimpleChannelInboundHandler<ByteBuf> {
     protected void channelRead0(ChannelHandlerContext handlerContext, ByteBuf byteBuf) throws Exception {
         Channel channel = handlerContext.channel();
 
-        int length = ByteBufUtils.readVarInt(byteBuf);
-        int opcode = ByteBufUtils.readVarInt(byteBuf);
-
         switch (this.currentProtocol) {
             case HANDSHAKE:
                 handleHandshake(channel, byteBuf);
@@ -37,7 +34,7 @@ public class PacketHandler extends SimpleChannelInboundHandler<ByteBuf> {
                 handleLogin(channel, byteBuf);
                 break;
             case STATUS:
-                handleStatus(channel, opcode, byteBuf);
+                handleStatus(channel, byteBuf);
                 break;
         }
     }
@@ -53,6 +50,9 @@ public class PacketHandler extends SimpleChannelInboundHandler<ByteBuf> {
      * @param byteBuf
      */
     private void handleHandshake(Channel channel, ByteBuf byteBuf) {
+        int length = ByteBufUtils.readVarInt(byteBuf);
+        int opcode = ByteBufUtils.readVarInt(byteBuf);
+
         int protoVersion = ByteBufUtils.readVarInt(byteBuf);
         String address = ByteBufUtils.readUTF(byteBuf);
         int port = byteBuf.readUnsignedShort();
@@ -69,6 +69,8 @@ public class PacketHandler extends SimpleChannelInboundHandler<ByteBuf> {
 
         if (this.currentProtocol == Protocol.STATUS) {
             sendStatusResponse(channel); // Immediately send the response
+        } else if (this.currentProtocol == Protocol.LOGIN) {
+            handleLogin(channel, byteBuf);
         }
     }
 
@@ -77,12 +79,12 @@ public class PacketHandler extends SimpleChannelInboundHandler<ByteBuf> {
      * @param channel
      * @param byteBuf
      */
-    private void handleStatus(Channel channel, int opcode, ByteBuf byteBuf) {
+    private void handleStatus(Channel channel, ByteBuf byteBuf) {
         if (!byteBuf.isReadable())
             return;
 
-        //   int length = ByteBufUtils.readVarInt(byteBuf);
-        //   int opcode = ByteBufUtils.readVarInt(byteBuf);
+        int length = ByteBufUtils.readVarInt(byteBuf);
+        int opcode = ByteBufUtils.readVarInt(byteBuf);
 
         if (opcode == 0x0) { // Status Request
             sendStatusResponse(channel);
@@ -138,6 +140,9 @@ public class PacketHandler extends SimpleChannelInboundHandler<ByteBuf> {
     private void handleLogin(Channel channel, ByteBuf byteBuf) {
         if (!byteBuf.isReadable())
             return;
+
+        int length = ByteBufUtils.readVarInt(byteBuf);
+        int opcode = ByteBufUtils.readVarInt(byteBuf);
 
         String name = ByteBufUtils.readUTF(byteBuf);
 

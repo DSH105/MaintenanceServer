@@ -115,8 +115,8 @@ public class MaintenanceServer {
     }
 
     public void stop() {
-        this.consoleManager.stop();
         LOGGER.info("Stopping server");
+        this.consoleManager.stop();
         this.workerGroup.shutdownGracefully();
         this.bossGroup.shutdownGracefully();
     }
